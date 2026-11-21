@@ -6,7 +6,7 @@ by Johan Plus Kei — リバーブの中身を「組み立てて・見て・聴�
 
 ![SOURCE](docs/screenshot-source.png)
 
-🔗 **他の学習ラボ・解説記事 / More learning labs & articles：** [Learning labs（GitHub Pages）](https://kazufumi01.github.io/) ・ [目次・解説記事（Seesaa・日本語）](https://jpk.seesaa.net/article/521891797.html)
+🔗 **学習ラボ・解説ページ / Learning labs & articles：** [Learning labs（GitHub Pages）](https://kazufumi01.github.io/) ・ [目次・解説記事（Seesaa・日本語）](https://jpk.seesaa.net/article/521891797.html)
 
 ## ⬇️ ダウンロード / Download
 
