@@ -1017,7 +1017,7 @@ void MainView::showExportMenu()
         else if (r >= 10 && r < 14) uu.setProperty ("exSR", rates[r - 10], nullptr);
         else if (r == 20 || r == 21) uu.setProperty ("exBits", r == 21 ? 32 : 24, nullptr);
         if (r == 30) exportTo();
-        else if (r > 0) juce::MessageManager::callAsync ([sp = juce::Component::SafePointer<MainView> (this)] { if (sp != nullptr) sp->showExportMenu(); });   // keep choosing
+        else if (r > 0) { juce::Component::SafePointer<MainView> sp0 (this); juce::MessageManager::callAsync ([sp0] { if (sp0 != nullptr) sp0->showExportMenu(); }); }   // keep choosing
     });
 }
 
