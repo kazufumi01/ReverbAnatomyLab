@@ -130,6 +130,13 @@ public:
     // ---------- user presets (message thread) ----------
     static juce::File userPresetDir(); static juce::File presetRoot(); static juce::File writeFactoryPresets();
     juce::Array<juce::File> userPresets() const;
+    // (0.11.0) additional libraries: Libraries/<library>/[<folder>/]<name>.rvpreset. Kept apart from the user presets; read-only in the plug-in
+    // (the plug-in never writes or deletes there). A library is a folder, or a .rvlib (= a zip of that folder) added through the menu.
+    struct LibItem { juce::String lib, sub, name; juce::File file; };
+    static juce::File libraryDir();
+    std::vector<LibItem> userPresetItems() const;        // the user presets with their folder (LibItem::sub)
+    std::vector<LibItem> libraryPresets() const;
+    static juce::String importLibrary (const juce::File& rvlibOrFolder, int* added = nullptr);       // "" = ok, else the reason
     juce::File saveUserPreset (const juce::String& name);      // returns the file (does not exist = failed)
     // section presets: only ER / TAIL / IO / EQ parameters (User Presets/<section>/*.rvsec)
     static juce::String sectionOf (const juce::String& id);
@@ -139,6 +146,7 @@ public:
     bool loadSectionPreset (const juce::File& f);
     bool loadUserPreset (const juce::File& f);
     juce::String currentUserPreset;
+    juce::File currentPresetFile;                      // (0.11.0) the file of the loaded user / library preset (for the ◀▶ order)
 
     // ---------- ear training (message thread): the settings are kept and put back afterwards ----------
     void earBegin();
@@ -195,6 +203,8 @@ public:
     rv::RTCurve rtCurve() const;                       // the reverb time asked for, per band
     double rtAt (double f) const;                      // the same, at any frequency (for the graph)
     bool tailFromRoom() const;                         // ROOM: the ALGO tail follows the ER's room
+    bool tailEdt() const;                              // (1.1) Hall engine with an initial decay below 100 %: two slopes
+    double edrAt (double f) const;                     // the initial-decay ratio (EDT / T30) at f
     bool tailDual() const;                             // (0.10.3) connected rooms: the tail has two slopes
     double roomRTAt (double f) const;                  // the room's own reverb time (Eyring + air)
     double decayBase() const;
@@ -244,7 +254,7 @@ private:
     er::Settings tailFilterSettings() const; er::TailFDN tail;
     void colorTail (double fs, std::vector<float>& L, std::vector<float>& R) const;
     rv::Fdn fdn; rv::InputFilter inF; rv::MasterEQ meq; rv::Fdn previewFdn; bool previewFdnReady = false;
-    std::vector<float> tdBuf[2]; int tdW = 0; double tdCur = 0; std::array<float, 96> revSnap {}; std::array<float, 64> filtCur {}, filtTgt {}; int filtSlopes[2] {}; bool filtInit = false;
+    std::vector<float> tdBuf[2]; int tdW = 0; double tdCur = 0; std::array<float, 128> revSnap {}; std::array<float, 64> filtCur {}, filtTgt {}; int filtSlopes[2] {}; bool filtInit = false;
     void glideFilters (int n, bool inFilter, bool force); float erOnG = 1, tailG = 1, outW = 1;
     mutable std::mutex measMutex; rv::Measure meas; std::thread measWorker; double measHash = 0, measSeen = -1; int measStable = 0; std::atomic<bool> measCancel { false };
     juce::dsp::Convolution conv { juce::dsp::Convolution::Latency { 0 } };

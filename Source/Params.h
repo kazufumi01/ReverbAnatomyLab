@@ -30,7 +30,9 @@ inline const char* const ids[] = {
     // 0.7.2: the Hall engine's onset fill
     "tFill",
     // 0.7.3: build-up per band
-    "tSpreadHi", "colEr", "colTail", "tLC", "tHC", "tLCs", "tHCs", "rbW", "rbD", "rbH", "rbWall", "rbFloor", "erRoomSel", "tRoomSel", "tIrSel", "erIrSel", "tBody", "shape", "splay", "rbShape", "rbSplay", "backAbs", "rbBackAbs", "clutter", "rbClutter" };
+    "tSpreadHi", "colEr", "colTail", "tLC", "tHC", "tLCs", "tHCs", "rbW", "rbD", "rbH", "rbWall", "rbFloor", "erRoomSel", "tRoomSel", "tIrSel", "erIrSel", "tBody", "shape", "splay", "rbShape", "rbSplay", "backAbs", "rbBackAbs", "clutter", "rbClutter",
+    // 1.1: initial decay (EDT / T30) of the Hall engine
+    "tEdr", "tEd1", "tEd2", "tEd3", "tEd4", "tEd5" };
 }
 
 inline juce::AudioProcessorValueTreeState::ParameterLayout makeLayout()
@@ -265,5 +267,8 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout makeLayout()
     fl ("rbBackAbs", "Room B Back Absorb", -100.0f, 100.0f, 0.0f, -1, "%");
     ch ("rbShape", "Room B Shape", { "Shoebox", "Hall", "Skewed", "Dome", "Connected", "Corridor" }, 0);
     fl ("rbSplay", "Room B Splay", 0.0f, 100.0f, 30.0f, -1, "%");
+    // 1.1: the tail's initial decay as a share of its reverb time (Hall engine; 100 % = one straight slope), and per band (at the five RT points)
+    fl ("tEdr", "Initial Decay", 40.0f, 100.0f, 100.0f, -1, "%");
+    for (int i = 1; i <= 5; ++i) fl (("tEd" + juce::String (i)).toRawUTF8(), ("Initial Decay " + juce::String (i)).toRawUTF8(), 40.0f, 130.0f, 100.0f, -1, "%");
     return L;
 }

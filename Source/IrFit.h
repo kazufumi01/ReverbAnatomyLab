@@ -21,6 +21,7 @@ struct Metrics
 {
     bool valid = false;
     double t30[kOct] {}, edt[kOct] {}, iacc[kIacc] {}, c80 = 0, peakMs = 0;
+    double ned[4] {};                                // (0.11.0) normalised echo density at 20 / 50 / 100 / 200 ms (a Gaussian-noise tail = 1)
     std::vector<double> env, specL, specE;          // env: 40 x 10 ms (dB re total); spectra: 1/3 oct 50 Hz .. 16 kHz (dB)
 };
 
@@ -130,11 +131,25 @@ inline Metrics measure (const float* L, const float* R, int n, double sr = kSR)
             m.iacc[k] = best;
         }
     }
+    // (0.11.0) normalised echo density (Abel & Huang): the share of samples of a 20 ms window (L+R mix) that lie outside one standard deviation, / 0.3173
+    {
+        const double ts[4] = { 0.020, 0.050, 0.100, 0.200 }; const int hw = (int) (0.010 * sr);
+        for (int k = 0; k < 4; ++k)
+        {
+            const int c = (int) (ts[k] * sr), a = c - hw, z = c + hw;
+            if (a < 0 || z >= n) { m.ned[k] = 0; continue; }
+            double sum = 0, sq = 0; const int w = z - a + 1;
+            for (int i = a; i <= z; ++i) { const double x = 0.5 * ((double) L[i] + R[i]); sum += x; sq += x * x; }
+            const double mean = sum / w, sd = std::sqrt (std::max (1e-30, sq / w - mean * mean)); int cnt = 0;
+            for (int i = a; i <= z; ++i) { const double x = 0.5 * ((double) L[i] + R[i]); if (std::abs (x - mean) > sd) ++cnt; }
+            m.ned[k] = std::min (1.0, cnt / (double) w / 0.3173);
+        }
+    }
     m.valid = true;
     return m;
 }
 
-struct Parts { double t30 = 0, edt = 0, env = 0, specL = 0, specE = 0, iacc = 0, c80 = 0; };
+struct Parts { double t30 = 0, edt = 0, env = 0, specL = 0, specE = 0, iacc = 0, c80 = 0, ned = 0; };
 inline double compare (const Metrics& t, const Metrics& c, Parts* out = nullptr)
 {
     if (! t.valid || ! c.valid) return 1e9;
@@ -155,8 +170,9 @@ inline double compare (const Metrics& t, const Metrics& c, Parts* out = nullptr)
     p.specL = shape (t.specL, c.specL) / 1.5; p.specE = 0.5 * shape (t.specE, c.specE) / 1.5;
     for (int k = 0; k < kIacc; ++k) p.iacc += std::abs (t.iacc[k] - c.iacc[k]); p.iacc = p.iacc / kIacc / 0.08;
     p.c80 = std::abs (t.c80 - c.c80) / 1.5;
+    { double s = 0; for (int k = 0; k < 4; ++k) s += std::abs (t.ned[k] - c.ned[k]); p.ned = s / 4 / 0.10; }       // (0.11.0) echo density, 0.1 = 1
     if (out) *out = p;
-    return p.t30 * p.t30 + p.edt * p.edt + p.env * p.env + p.specL * p.specL + p.specE * p.specE + p.iacc * p.iacc + p.c80 * p.c80;
+    return p.t30 * p.t30 + p.edt * p.edt + p.env * p.env + p.specL * p.specL + p.specE * p.specE + p.iacc * p.iacc + p.c80 * p.c80 + p.ned * p.ned;
 }
 
 // ---- the target: one file, or a true-stereo pair (*_L / *_R), at 48 kHz; a dry spike at the start is removed
@@ -232,7 +248,7 @@ inline juce::String pairName (const juce::File& f)
 
 // ---- the parameters it moves (id, low, high, log scale)
 struct P { const char* id; double lo, hi; bool lg; };
-inline std::vector<P> groupDecay() { return { { "tDecay", 0.2, 30, true }, { "rtM1", 0.15, 6, true }, { "rtM2", 0.15, 6, true }, { "rtM3", 0.15, 6, true }, { "rtM4", 0.15, 6, true }, { "rtM5", 0.15, 6, true } }; }
+inline std::vector<P> groupDecay() { return { { "tDecay", 0.2, 30, true }, { "rtM1", 0.15, 6, true }, { "rtM2", 0.15, 6, true }, { "rtM3", 0.15, 6, true }, { "rtM4", 0.15, 6, true }, { "rtM5", 0.15, 6, true }, { "tEdr", 40, 100, false } }; }
 inline std::vector<P> groupTime() { return { { "predelay", 0, 120, false }, { "tPre", 0, 200, false }, { "tSize", 10, 300, true }, { "tDiff", 0, 100, false }, { "tLvl", -36, 12, false }, { "level", -24, 12, false }, { "tSpread", 0, 300, false }, { "tShape", -100, 100, false }, { "tSpreadHi", 20, 200, true }, { "tFill", 0, 100, false } }; }
 inline std::vector<P> groupER() { return { { "first", 1, 80, true }, { "length", 8, 300, true }, { "growth", 0, 2.5, false }, { "energy", -30, 12, false }, { "decay", -40, 24, false } }; }
 inline std::vector<P> groupTone() { return { { "eqG1", -12, 12, false }, { "eqG2", -12, 12, false }, { "eqG3", -12, 12, false }, { "eqG4", -12, 12, false }, { "eqG5", -12, 12, false }, { "eqG6", -12, 12, false }, { "eqLP", 2000, 20000, true }, { "damp", 1500, 16000, true } }; }

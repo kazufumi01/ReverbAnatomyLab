@@ -6,7 +6,7 @@
 set -e
 cd "$(dirname "$0")/../.."
 
-VERSION="${1:-1.0.0}"
+VERSION="${1:-1.1.0}"
 ART="${2:-build/ReverbAnatomyLab_artefacts/Release}"
 NAME="Reverb Anatomy Lab"
 DIR="build/zip/ReverbAnatomyLab-${VERSION}-mac"

@@ -14,8 +14,8 @@ by Johan Plus Kei — リバーブの中身を「組み立てて・見て・聴�
 
 | | 手動インストール（おすすめ） | インストーラー |
 |---|---|---|
-| **Mac**（macOS 11+, Apple Silicon / Intel） | [`ReverbAnatomyLab-1.0.0-mac.zip`](https://github.com/kazufumi01/ReverbAnatomyLab/releases/latest/download/ReverbAnatomyLab-1.0.0-mac.zip) | [`ReverbAnatomyLab-1.0.0-mac.pkg`](https://github.com/kazufumi01/ReverbAnatomyLab/releases/latest/download/ReverbAnatomyLab-1.0.0-mac.pkg) |
-| **Windows**（10 / 11, 64bit）⚠️未検証 | [`ReverbAnatomyLab-1.0.0-win64.zip`](https://github.com/kazufumi01/ReverbAnatomyLab/releases/latest/download/ReverbAnatomyLab-1.0.0-win64.zip) | [`ReverbAnatomyLab-1.0.0-win64.exe`](https://github.com/kazufumi01/ReverbAnatomyLab/releases/latest/download/ReverbAnatomyLab-1.0.0-win64.exe) |
+| **Mac**（macOS 11+, Apple Silicon / Intel） | [`ReverbAnatomyLab-1.1.0-mac.zip`](https://github.com/kazufumi01/ReverbAnatomyLab/releases/latest/download/ReverbAnatomyLab-1.1.0-mac.zip) | [`ReverbAnatomyLab-1.1.0-mac.pkg`](https://github.com/kazufumi01/ReverbAnatomyLab/releases/latest/download/ReverbAnatomyLab-1.1.0-mac.pkg) |
+| **Windows**（10 / 11, 64bit）⚠️未検証 | [`ReverbAnatomyLab-1.1.0-win64.zip`](https://github.com/kazufumi01/ReverbAnatomyLab/releases/latest/download/ReverbAnatomyLab-1.1.0-win64.zip) | [`ReverbAnatomyLab-1.1.0-win64.exe`](https://github.com/kazufumi01/ReverbAnatomyLab/releases/latest/download/ReverbAnatomyLab-1.1.0-win64.exe) |
 
 - インストール方法：**[INSTALL.md](INSTALL.md)**（日本語 / English）
 - ⚠️ **Windows 版は実機での動作確認ができていません**（自動ビルドで作成。VST3 と Standalone）。 / The Windows build is untested on real hardware.
@@ -33,6 +33,8 @@ by Johan Plus Kei — リバーブの中身を「組み立てて・見て・聴�
   - 周波数ごとの残響時間（RT）、立ち上がり（Onset Fill・Spread）、Bass / High の減衰、Diffusion、モジュレーション
 - **見る**：エコーグラム／スペクトログラム／ウォーターフォール、スペアナ上で INPUT・ER・TAIL のフィルター、RT、MASTER EQ を 6 面で比較、測定表（T30・EDT・C80・D50・IACC）、部屋の平面図、IR 解析
 - **IR を扱う**：L / R の組（`名前_L`／`名前_R` など）を自動判別して読み込み、IR → アルゴリズムの変換（フィット）、IR の比較、IR の書き出し、フォルダー一括からのプリセット作成
+- **Initial Decay（1.1.0）**：Hall エンジンで、最初の 10 dB の減衰の速さを残響時間（T30）に対する割合で（100 % ＝ 一直線）。聴き比べ用のライブラリー `Initial_Decay_Compare.rvlib` を同梱（Releases）
+- **追加ライブラリー（1.1.0）**：`.rvlib`／zip で追加するプリセット集。ユーザープリセットとは別管理（読み取り専用）で、メニューではユーザープリセットの上に出ます。ユーザープリセットもフォルダーで整理でき、◀ ▶ は内蔵→ライブラリー→ユーザーの順に巡回
 - **DYN / MOD**：ダッキング（Single / Multi / Spectral）・ゲート、LFO ×2・エンベロープ・コーラス・変調マトリクス
 - **COLOR**：時代ごとのプリセット（Bandwidth / Bits / Wander）
 - **レッスン**（設定の読み込み付き）と**耳トレ**、プリセット（用途別・IR フィット）とユーザープリセット、◀ ▶ で順送り、パラメーターロック

@@ -136,6 +136,21 @@ void ERProcessor::rebuildTaps (bool instant)
 // ---------------------------------------------------------------------------
 bool ERProcessor::tailFromRoom() const { const int ts = (int) value ("tSrc"); return (ts == 0 && value ("tRoom") > 0.5f) || (ts == 2 && (int) value ("tBody") == 1); }
 bool ERProcessor::tailDual() const { return tailFromRoom() && (int) value ("tEng") == 0 && value ("tFreeze") < 0.5f && tailRoomP().shape == 4; }
+double ERProcessor::edrAt (double f) const
+{
+    double nf[5], nm[5];
+    for (int i = 0; i < 5; ++i) { const juce::String n (i + 1); nf[i] = value (("rtF" + n).toRawUTF8()); nm[i] = value (("tEd" + n).toRawUTF8()) / 100.0; }
+    double m = nm[0];
+    if (f <= nf[0]) m = nm[0]; else if (f >= nf[4]) m = nm[4];
+    else for (int i = 0; i < 4; ++i) if (f <= nf[i + 1]) { const double u = std::log (f / nf[i]) / std::log (std::max (1.0001, nf[i + 1] / nf[i])); m = nm[i] * std::pow (nm[i + 1] / nm[i], u); break; }
+    return juce::jlimit (0.4, 1.0, value ("tEdr") / 100.0 * m);
+}
+bool ERProcessor::tailEdt() const
+{
+    if ((int) value ("tEng") != 0 || value ("tFreeze") > 0.5f || tailDual()) return false;
+    for (int k = 0; k < rv::kBands; ++k) if (edrAt (rv::bandFc (k)) < 0.995) return true;
+    return false;
+}
 double ERProcessor::roomRTAt (double f) const { return er::roomAcoustics (tailRoomP(), f).rt; }
 void ERProcessor::copyRoom (bool aToB) { for (auto [a, b] : { std::pair { "roomW", "rbW" }, { "roomD", "rbD" }, { "roomH", "rbH" }, { "wall", "rbWall" }, { "floor", "rbFloor" }, { "shape", "rbShape" }, { "splay", "rbSplay" }, { "backAbs", "rbBackAbs" }, { "clutter", "rbClutter" } }) { if (aToB) setParam (b, value (a)); else setParam (a, value (b)); } }
 // the tail's base reverb time: Decay, or (ROOM) the room's at 1 kHz
@@ -247,6 +262,15 @@ rv::TailSettings ERProcessor::tailSettings (double) const
         if (c.sameRoom) { t.gain1 = std::sqrt (c.wa); t.gain2 = std::sqrt (c.wb); t.delay2Ms = 0; }
         else { t.gain1 = 0; t.gain2 = std::sqrt (c.peak); t.delay2Ms = juce::jlimit (0.0, 200.0, 0.6 * c.peakMs); }
     }
+    if (tailEdt())
+    {   // (1.1) initial decay: per band, a fast and a slow slope that give the wanted T30 and EDT; fixed 80 / 20 energy split
+        for (int k = 0; k < rv::kBands; ++k)
+        {
+            const auto o = er::edtDecay (t.rt.rt[(size_t) k], edrAt (rv::bandFc (k)));
+            t.rt.rt[(size_t) k] = juce::jlimit (0.05, 60.0, o.Ta); t.rt2.rt[(size_t) k] = juce::jlimit (0.05, 60.0, o.Tb);
+        }
+        t.dual = true; t.sizeMs2 = t.sizeMs * 1.37; t.gain1 = std::sqrt (0.8); t.gain2 = std::sqrt (0.2); t.delay2Ms = 0;
+    }
     return t;
 }
 void ERProcessor::setInputFilter (rv::InputFilter& f, double fs) const
@@ -266,11 +290,11 @@ void ERProcessor::setMasterEQ (rv::MasterEQ& e, double fs) const
 // the reverb's own parameters changed? (compared once per block; the FDN takes them at control rate)
 void ERProcessor::updateReverb (bool force)
 {
-    static const char* const ids[] = { "tDecay", "tSize", "tDiff", "tModD", "tModR", "tFreeze", "rtMode", "tEng", "tRoom", "tSrc", "roomW", "roomD", "roomH", "wall", "floor", "shape", "splay", "backAbs", "rbW", "rbD", "rbH", "rbWall", "rbFloor", "rbShape", "rbSplay", "rbBackAbs", "clutter", "rbClutter", "tRoomSel", "tBody", "aGrav", "aFb", "tSpread", "tShape", "tBassW", "tFill", "tSpreadHi",
+    static const char* const ids[] = { "tDecay", "tSize", "tDiff", "tModD", "tModR", "tFreeze", "rtMode", "tEng", "tRoom", "tSrc", "roomW", "roomD", "roomH", "wall", "floor", "shape", "splay", "backAbs", "rbW", "rbD", "rbH", "rbWall", "rbFloor", "rbShape", "rbSplay", "rbBackAbs", "clutter", "rbClutter", "tRoomSel", "tBody", "aGrav", "aFb", "tSpread", "tShape", "tBassW", "tFill", "tSpreadHi", "tEdr", "tEd1", "tEd2", "tEd3", "tEd4", "tEd5", "tEdr", "tEd1", "tEd2", "tEd3", "tEd4", "tEd5",
         "rtF1", "rtF2", "rtF3", "rtF4", "rtF5", "rtM1", "rtM2", "rtM3", "rtM4", "rtM5", "rtQ1", "rtQ2", "rtQ3", "rtQ4", "rtQ5", "mbN", "mbX1", "mbX2", "mbX3", "mbX4", "mbM1", "mbM2", "mbM3", "mbM4", "mbM5",
         "iLC", "iHC", "iLCs", "iHCs", "iTilt", "eqOn", "eqHP", "eqLP",
         "eqF1", "eqG1", "eqQ1", "eqF2", "eqG2", "eqQ2", "eqF3", "eqG3", "eqQ3", "eqF4", "eqG4", "eqQ4", "eqF5", "eqG5", "eqQ5", "eqF6", "eqG6", "eqQ6", "eqB1", "eqB2", "eqB3", "eqB4", "eqB5", "eqB6" };
-    constexpr int nT = 62, nF = 5, nAll = (int) (sizeof (ids) / sizeof (ids[0]));
+    constexpr int nT = 68, nF = 5, nAll = (int) (sizeof (ids) / sizeof (ids[0])); static_assert (nAll <= 128, "revSnap");
     bool chT = force, chF = force, chE = force;
     for (int i = 0; i < nAll; ++i)
     {
@@ -766,7 +790,7 @@ void ERProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuff
         const double want2 = juce::jlimit (0.0, (double) len - 4, (pre + X) * sr / 1000.0);
         // (0.8.1) a preset / the tail's type or source changed: the tail fades out (6 ms), every glide jumps to the new settings, and it fades back in
         {
-            const int key = (int) value ("tEng") + 8 * tsrc + 64 * (value ("tRoom") > 0.5f ? 1 : 0) + 128 * (int) value ("tBody") + 512 * (int) value ("tIrSel") + 1024 * (tailDual() ? 1 : 0);
+            const int key = (int) value ("tEng") + 8 * tsrc + 64 * (value ("tRoom") > 0.5f ? 1 : 0) + 128 * (int) value ("tBody") + 512 * (int) value ("tIrSel") + 1024 * (tailDual() ? 1 : 0) + 2048 * (tailEdt() ? 1 : 0);
             if (key != lastTailKey) { if (lastTailKey >= 0) snapReq = true; lastTailKey = key; }
             if (snapReq.exchange (false) && snapState == 0 && snapEnabled) snapState = 1;
             if (snapState == 1 && snapG <= 0.0f)
@@ -980,7 +1004,7 @@ ERProcessor::KeepLocked::~KeepLocked() { for (auto& [id, x] : v) p.setParam (id.
 void ERProcessor::applyPreset (int index)
 {
     const KeepLocked keepLocked (*this);          // (0.8.0) locked parameters keep their values
-    currentUserPreset = {};
+    currentUserPreset = {}; currentPresetFile = juce::File();
     const auto& P = presets(); if (index < 0 || index >= (int) P.size()) return;
     requestTransition (true);
     undo.beginNewTransaction();
@@ -1256,10 +1280,89 @@ juce::File ERProcessor::writeFactoryPresets()
     return dir;
 }
 juce::Array<juce::File> ERProcessor::userPresets() const
-{
-    auto a = userPresetDir().findChildFiles (juce::File::findFiles, false, "*.rvpreset");
-    std::sort (a.begin(), a.end(), [] (const juce::File& x, const juce::File& y) { return x.getFileName().compareNatural (y.getFileName()) < 0; });
+{   // (0.11.0) the folders inside User Presets count too (section presets are .rvsec and stay out)
+    const auto root = userPresetDir();
+    auto a = root.findChildFiles (juce::File::findFiles, true, "*.rvpreset");
+    std::sort (a.begin(), a.end(), [&] (const juce::File& x, const juce::File& y)
+    {
+        const auto dx = x.getParentDirectory().getRelativePathFrom (root), dy = y.getParentDirectory().getRelativePathFrom (root);
+        return dx != dy ? dx.compareNatural (dy) < 0 : x.getFileName().compareNatural (y.getFileName()) < 0;
+    });
     return a;
+}
+std::vector<ERProcessor::LibItem> ERProcessor::userPresetItems() const
+{
+    std::vector<LibItem> out; const auto root = userPresetDir();
+    for (const auto& f : userPresets())
+    {
+        auto rel = f.getParentDirectory().getRelativePathFrom (root).replaceCharacter ('\\', '/'); if (rel == ".") rel = {};
+        out.push_back ({ {}, rel, f.getFileNameWithoutExtension(), f });
+    }
+    return out;
+}
+juce::File ERProcessor::libraryDir() { return presetRoot().getChildFile ("Libraries"); }
+std::vector<ERProcessor::LibItem> ERProcessor::libraryPresets() const
+{
+    std::vector<LibItem> out; const auto root = libraryDir();
+    for (const auto& ld : root.findChildFiles (juce::File::findDirectories, false))
+    {
+        std::vector<LibItem> one;
+        for (const auto& f : ld.findChildFiles (juce::File::findFiles, true, "*.rvpreset"))
+        {
+            auto rel = f.getParentDirectory().getRelativePathFrom (ld).replaceCharacter ('\\', '/');
+            if (rel == ".") rel = {};
+            one.push_back ({ ld.getFileName(), rel, f.getFileNameWithoutExtension(), f });
+        }
+        std::sort (one.begin(), one.end(), [] (const LibItem& a, const LibItem& b) { return a.sub != b.sub ? a.sub.compareNatural (b.sub) < 0 : a.name.compareNatural (b.name) < 0; });
+        out.insert (out.end(), one.begin(), one.end());
+    }
+    return out;
+}
+// a .rvlib (a zip) or a folder -> Libraries/<name>/ ; only .rvpreset files and library.txt are taken, and only from inside the library (no ".." / absolute paths)
+juce::String ERProcessor::importLibrary (const juce::File& src, int* added)
+{
+    int n = 0; if (added) *added = 0;
+    auto okName = [] (const juce::String& p) { return p.isNotEmpty() && ! p.startsWith ("/") && ! p.startsWith ("\\") && ! p.contains ("..") && ! p.contains (":") && (p.endsWithIgnoreCase (".rvpreset") || p.endsWithIgnoreCase ("library.txt")); };
+    const auto name = juce::File::createLegalFileName (src.getFileNameWithoutExtension()).trim();
+    if (name.isEmpty()) return juce::String::fromUTF8 ("名前が読めません");
+    if (src.isDirectory())
+    {
+        const auto dst = libraryDir().getChildFile (name);
+        for (const auto& f : src.findChildFiles (juce::File::findFiles, true, "*"))
+        {
+            const auto rel = f.getRelativePathFrom (src).replaceCharacter ('\\', '/');
+            if (! okName (rel)) continue;
+            const auto to = dst.getChildFile (rel); to.getParentDirectory().createDirectory();
+            if (f.copyFileTo (to)) ++n;
+        }
+    }
+    else
+    {
+        juce::ZipFile z (src); if (z.getNumEntries() <= 0) return juce::String::fromUTF8 ("ライブラリー（.rvlib／zip）として読めません");
+        // one top folder in the zip = the library's name; files at the top = the file's name
+        juce::String top; bool one = true;
+        for (int i = 0; i < z.getNumEntries(); ++i)
+        {
+            const auto fn = z.getEntry (i)->filename.replaceCharacter ('\\', '/'); if (fn.endsWithChar ('/')) continue;
+            const auto first = fn.upToFirstOccurrenceOf ("/", false, false);
+            if (! fn.contains ("/")) { one = false; break; }
+            if (top.isEmpty()) top = first; else if (top != first) { one = false; break; }
+        }
+        const auto libName = one && top.isNotEmpty() ? juce::File::createLegalFileName (top) : name;
+        const auto dst = libraryDir().getChildFile (libName);
+        for (int i = 0; i < z.getNumEntries(); ++i)
+        {
+            const auto* e = z.getEntry (i); auto fn = e->filename.replaceCharacter ('\\', '/'); if (fn.endsWithChar ('/')) continue;
+            if (one && top.isNotEmpty()) fn = fn.fromFirstOccurrenceOf ("/", false, false);
+            if (! okName (fn)) continue;
+            std::unique_ptr<juce::InputStream> in (z.createStreamForEntry (i)); if (in == nullptr) continue;
+            const auto to = dst.getChildFile (fn); to.getParentDirectory().createDirectory();
+            juce::FileOutputStream out (to); if (! out.openedOk()) continue;
+            out.setPosition (0); out.truncate(); out.writeFromInputStream (*in, -1); ++n;
+        }
+    }
+    if (added) *added = n;
+    return n > 0 ? juce::String() : juce::String::fromUTF8 ("取り込めるプリセット（.rvpreset）が見つかりません");
 }
 juce::File ERProcessor::saveUserPreset (const juce::String& nameIn)
 {
@@ -1278,7 +1381,7 @@ juce::File ERProcessor::saveUserPreset (const juce::String& nameIn)
     if (tailIrOwn() && lastTailIRFile.existsAsFile()) x.setAttribute ("tir", lastTailIRFile.getFullPathName());
     const auto f = dir.getChildFile (name + ".rvpreset");
     x.writeTo (f);
-    currentUserPreset = nameIn.trim();
+    currentUserPreset = nameIn.trim(); currentPresetFile = f;
     return f;
 }
 // a built-in preset, but only its part (the ER presets from the ER tab): everything else keeps its value
@@ -1299,7 +1402,7 @@ void ERProcessor::applyPresetPart (int index, const juce::String& section)
 juce::String ERProcessor::sectionOf (const juce::String& id)
 {
     static const juce::StringArray io { "inMode", "inW", "outMode", "outW", "iLC", "iHC", "iLCs", "iHCs", "iTilt", "iTo" };
-    static const juce::StringArray tail { "rbW", "rbD", "rbH", "rbWall", "rbFloor", "rbShape", "rbSplay", "tRoomSel", "tIrSel", "tBody", "tLC", "tHC", "tLCs", "tHCs", "tDecay", "tSize", "tPre", "tDiff", "tModD", "tModR", "tLvl", "tFreeze", "rtMode", "mbN", "tSrc", "tEng", "tRoom", "aGrav", "aFb", "tSpread", "tShape", "tBassW", "tFill", "tSpreadHi" };
+    static const juce::StringArray tail { "rbW", "rbD", "rbH", "rbWall", "rbFloor", "rbShape", "rbSplay", "tRoomSel", "tIrSel", "tBody", "tLC", "tHC", "tLCs", "tHCs", "tDecay", "tSize", "tPre", "tDiff", "tModD", "tModR", "tLvl", "tFreeze", "rtMode", "mbN", "tSrc", "tEng", "tRoom", "aGrav", "aFb", "tSpread", "tShape", "tBassW", "tFill", "tSpreadHi", "tEdr", "tEd1", "tEd2", "tEd3", "tEd4", "tEd5" };
     static const juce::StringArray global { "mix", "out", "erOn", "tOn", "erBal", "autoLvl", "colEr", "colTail" };
     if (id.startsWith ("dk") || id.startsWith ("gt")) return "DYN";
     if (id.startsWith ("ch") || id.startsWith ("l1") || id.startsWith ("l2") || id == "enAtk" || id == "enRel" || id == "enSens" || (id.length() == 5 && id[0] == 'm' && juce::CharacterFunctions::isDigit (id[1]))) return "MOD";
@@ -1371,7 +1474,7 @@ bool ERProcessor::loadUserPreset (const juce::File& f)
     if (const juce::File ir (x->getStringAttribute ("tir")); x->hasAttribute ("tir") && ir.existsAsFile()) loadTailIR (ir);
     currentPreset = -1; uiState.setProperty ("preset", -1, nullptr); uiState.setProperty ("unit", -1, nullptr);
     autoComp = 0; setParam ("autoLvl", 0);                    // (0.7.1) a saved sound: its own level
-    currentUserPreset = x->getStringAttribute ("name", f.getFileNameWithoutExtension());
+    currentUserPreset = x->getStringAttribute ("name", f.getFileNameWithoutExtension()); currentPresetFile = f;
     return true;
 }
 
@@ -1608,20 +1711,37 @@ public:
         auto best = fit::nelderMead ([&] (const std::vector<double>& x) { put (x); return eval(); }, x0, maxEval, randomFirst, seed, [this] { return threadShouldExit(); });
         put (best);
     }
+    // (0.11.0) the whole sequence of groups from the current values; shorter = the second and third starts
+    void sequence (double k)
+    {
+        auto e = [k] (int n) { return std::max (10, (int) (n * k)); };
+        group (fit::groupTime(), e (70), (int) (16 * k), 21);
+        group (fit::groupDecay(), e (45), 0, 11);
+        group (fit::groupER(), e (45), (int) (10 * k), 31);
+        group (fit::groupTone(), e (40), 0, 41);
+        group (fit::groupStereo(), e (20), 0, 51);
+        group (fit::groupDecay(), e (30), 0, 12);
+        group (fit::groupTime(), e (35), 0, 22);
+        group (fit::groupER(), e (20), 0, 32);
+        group (fit::groupDecay(), e (30), 0, 13);
+    }
     void run() override
     {
         ERProcessor::tlOverride = &vals; ERProcessor::tlMaxLenS = lenS;
         cost0 = eval (&parts0);
-        // order: the time shape first (it moves the decay), then the decay, ER, tone, width; a second, shorter pass; the decay last
-        group (fit::groupTime(), 70, 16, 21);
-        group (fit::groupDecay(), 45, 0, 11);
-        group (fit::groupER(), 45, 10, 31);
-        group (fit::groupTone(), 40, 0, 41);
-        group (fit::groupStereo(), 20, 0, 51);
-        group (fit::groupDecay(), 30, 0, 12);
-        group (fit::groupTime(), 35, 0, 22);
-        group (fit::groupER(), 20, 0, 32);
-        group (fit::groupDecay(), 30, 0, 13);
+        // (0.11.0) three starts: the usual one, then two with a different build-up (Shape / Spread / Spread High), each shorter.
+        // The best of the three is kept, so a start that falls into another valley (the 0.7.4 re-fit of the 224 was 5 -> 27) can never replace a better result.
+        const fit::Values base = vals; fit::Values bestV = vals; double bestC = 1e30;
+        const struct { float shape, spreadK, hiK; double k; } starts[3] = { { -1, 1.0f, 1.0f, 1.0 }, { -20, 0.6f, 1.5f, 0.55 }, { 70, 1.4f, 0.7f, 0.55 } };
+        for (int s = 0, ns = std::getenv ("RVFIT_SINGLE") ? 1 : 3; s < ns && ! threadShouldExit(); ++s)
+        {
+            vals = (s == 0 ? base : bestV);
+            if (s > 0) { vals["tShape"] = starts[s].shape; vals["tSpread"] = juce::jlimit (0.0f, 300.0f, base.at ("tSpread") * starts[s].spreadK); vals["tSpreadHi"] = juce::jlimit (20.0f, 200.0f, 100.0f * starts[s].hiK); }
+            sequence (starts[s].k);
+            const double c = eval();
+            if (c < bestC) { bestC = c; bestV = vals; }
+        }
+        vals = bestV;
         {   // the level: the shape is matched, the loudness is set to the plug-in's reference (an IR file's own level is arbitrary)
             ERProcessor::ExportOpts o; o.sr = fit::kSR; o.bits = 32; o.tail = true; juce::AudioBuffer<float> b; double g = 0; proc.renderIR (o, b, g);
             double e = 0; for (int c = 0; c < 2; ++c) for (int k = 0; k < b.getNumSamples(); ++k) e += 0.5 * (double) b.getSample (c, k) * b.getSample (c, k);
@@ -1632,7 +1752,7 @@ public:
         ERProcessor::tlOverride = nullptr; ERProcessor::tlMaxLenS = 0;
         progress = 1.0f; finished = true;
     }
-    static constexpr int kBudget = 400;
+    static constexpr int kBudget = 900;
 private:
     ERProcessor& proc; fit::Metrics tgt;
 };
@@ -1720,7 +1840,8 @@ void ERProcessor::stepBatch()
             batchLog << fit::pairName (f) << juce::String::fromUTF8 ("：誤差 ") << juce::String (fitJob->cost0, 0) << " -> " << juce::String (fitJob->cost1, 1)
                      << juce::String::fromUTF8 ("（T30 ") << juce::String (a.t30 * 5, 1) << " -> " << juce::String (b.t30 * 5, 1)
                      << juce::String::fromUTF8 (" %、EDT ") << juce::String (a.edt * 8, 1) << " -> " << juce::String (b.edt * 8, 1)
-                     << juce::String::fromUTF8 (" %、C80 ") << juce::String (a.c80 * 1.5, 1) << " -> " << juce::String (b.c80 * 1.5, 1) << " dB, "
+                     << juce::String::fromUTF8 (" %、C80 ") << juce::String (a.c80 * 1.5, 1) << " -> " << juce::String (b.c80 * 1.5, 1) << " dB、"
+                     << juce::String::fromUTF8 ("密度 ") << juce::String (a.ned * 0.1, 3) << " -> " << juce::String (b.ned * 0.1, 3) << "、"
                      << fitJob->evals << juce::String::fromUTF8 (" 回）\n");
             lastFitReport = batchLog;
         }

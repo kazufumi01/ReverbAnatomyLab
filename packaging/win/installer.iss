@@ -1,9 +1,9 @@
 ﻿; Reverb Anatomy Lab — Windows インストーラー（Inno Setup 6）
-; GitHub Actions から:  iscc /DMyAppVersion=1.0.0 /DArtDir=..\..\build\ReverbAnatomyLab_artefacts\Release packaging\win\installer.iss
+; GitHub Actions から:  iscc /DMyAppVersion=1.1.0 /DArtDir=..\..\build\ReverbAnatomyLab_artefacts\Release packaging\win\installer.iss
 ; 出力: dist\ReverbAnatomyLab-<ver>-win64.exe （コード署名なし）
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.0"
+  #define MyAppVersion "1.1.0"
 #endif
 #ifndef ArtDir
   #define ArtDir "..\..\build\ReverbAnatomyLab_artefacts\Release"

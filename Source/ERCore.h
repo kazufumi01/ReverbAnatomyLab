@@ -508,6 +508,32 @@ inline Coupled coupledDecay (const RoomP& R, double f, int srcRoom, int lisRoom)
     }
     return c;
 }
+
+// (1.1) Initial decay: a two-slope model E(t) = 0.8*10^(-6t/Ta) + 0.2*10^(-6t/Tb) (RT60 in s) whose T30 (-5..-35 dB) is the wanted one and whose
+// EDT (0..-10 dB) is r times that (0.4 .. 1). The weights are fixed, so only the two times change per band.
+struct EdtSlopes { double Ta = 1, Tb = 1; };
+inline EdtSlopes edtDecay (double T30, double r)
+{
+    constexpr double wa = 0.8, wb = 0.2;
+    EdtSlopes o; o.Ta = o.Tb = T30; if (r >= 0.995) return o;
+    r = std::max (0.4, r);
+    auto timeAt = [&] (double rho, double L)
+    {   // time (Tb = 1) at which the decay is L dB down
+        double lo = 0, hi = 4;
+        for (int i = 0; i < 48; ++i)
+        {
+            const double t = 0.5 * (lo + hi), e = wa * std::pow (10.0, -6.0 * t / rho) + wb * std::pow (10.0, -6.0 * t);
+            if (10.0 * std::log10 (e) > L) lo = t; else hi = t;
+        }
+        return 0.5 * (lo + hi);
+    };
+    auto t30 = [&] (double rho) { return 2.0 * (timeAt (rho, -35.0) - timeAt (rho, -5.0)); };
+    auto edt = [&] (double rho) { return 6.0 * timeAt (rho, -10.0); };
+    double lo = 0.005, hi = 1.0;
+    for (int i = 0; i < 28; ++i) { const double m = 0.5 * (lo + hi); if (edt (m) / t30 (m) > r) hi = m; else lo = m; }
+    const double rho = 0.5 * (lo + hi), s = T30 / std::max (1e-6, t30 (rho));
+    o.Ta = rho * s; o.Tb = s; return o;
+}
 inline void coupledSizesMs (const RoomP& R, double& ms1, double& ms2)
 {
     const auto G = coupledGeom (R);

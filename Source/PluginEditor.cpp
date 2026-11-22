@@ -435,21 +435,31 @@ MainView::MainView (ERProcessor& p)
         presetBox.onChange = [this]
         {
             const int id = presetBox.getSelectedId();
-            if (id >= 5000) { const auto U = proc.userPresets(); if (id - 5000 < U.size()) proc.loadUserPreset (U[id - 5000]); }
+            if (id >= 6000) { const auto L = proc.libraryPresets(); if (id - 6000 < (int) L.size()) { proc.loadUserPreset (L[(size_t) (id - 6000)].file); proc.currentUserPreset = L[(size_t) (id - 6000)].name; } }
+            else if (id >= 5000) { const auto U = proc.userPresets(); if (id - 5000 < U.size()) proc.loadUserPreset (U[id - 5000]); }
             else if (id >= 4000) showPresetMenuExtras (id);
             else if (id > 0 && id - 1 != proc.currentPreset) { proc.applyPreset (id - 1); proc.currentUserPreset = {}; }
         };
         auto stepP = [this] (int d)
-        {   // the built-in presets in the menu's order, then the user presets (and round again)
-            const auto& o = presetOrder(); const auto U = proc.userPresets(); const int n = (int) o.size(), m = U.size();
+        {   // the built-in presets in the menu's order, then the additional libraries, then the user presets (and round again)
+            const auto& o = presetOrder(); const auto L = proc.libraryPresets(); const auto U = proc.userPresets();
+            const int n = (int) o.size(), nl = (int) L.size(), m = U.size();
             int k = 0;
             if (proc.currentUserPreset.isNotEmpty())
             {
-                k = n; for (int i = 0; i < m; ++i) { const auto nm = U[i].getFileNameWithoutExtension(); if (nm == proc.currentUserPreset || nm == juce::File::createLegalFileName (proc.currentUserPreset)) { k = n + i; break; } }
+                k = n;
+                if (proc.currentPresetFile != juce::File())
+                {
+                    for (int i = 0; i < nl; ++i) if (L[(size_t) i].file == proc.currentPresetFile) { k = n + i; break; }
+                    for (int i = 0; i < m; ++i) if (U[i] == proc.currentPresetFile) { k = n + nl + i; break; }
+                }
+                else for (int i = 0; i < m; ++i) { const auto nm = U[i].getFileNameWithoutExtension(); if (nm == proc.currentUserPreset || nm == juce::File::createLegalFileName (proc.currentUserPreset)) { k = n + nl + i; break; } }
             }
             else if (proc.currentPreset >= 0) for (int i = 0; i < n; ++i) if (o[(size_t) i] == proc.currentPreset) k = i;
-            const int tot = n + m, nk = ((k + d) % tot + tot) % tot;
-            if (nk < n) proc.applyPreset (o[(size_t) nk]); else proc.loadUserPreset (U[nk - n]);
+            const int tot = n + nl + m, nk = ((k + d) % tot + tot) % tot;
+            if (nk < n) proc.applyPreset (o[(size_t) nk]);
+            else if (nk < n + nl) proc.loadUserPreset (L[(size_t) (nk - n)].file);
+            else proc.loadUserPreset (U[nk - n - nl]);
         };
         prevP.dir = -1; nextP.dir = 1;
         prevP.onClick = [stepP] { stepP (-1); }; nextP.onClick = [stepP] { stepP (1); };
@@ -656,6 +666,9 @@ MainView::MainView (ERProcessor& p)
             auto& b3 = dv ("tBassW", "Bass Width", pct);
             auto& b4 = dv ("tFill", "Onset Fill", pct); pageComps[1].push_back (&b4);
             auto& b5 = dv ("tSpreadHi", "Spread High", pct); pageComps[1].push_back (&b5);
+            auto& b6 = dv ("tEdr", "Initial Decay", pct); pageComps[1].push_back (&b6);
+            setHelp (b6, "Initial Decay", "最初の 10 dB の減衰の速さを、残響時間（T30）に対する割合で。100 % ＝ 一直線、60 % ＝ 立ち上がりが速く落ちて後ろに長く残る。Hall エンジンのみ（ROOM の連結は別）。音量も少し下がります。", "How fast the first 10 dB fall, as a share of the reverb time (T30). 100 % = one straight slope; 60 % = a quick drop, then a long tail. Hall engine only (connected rooms have their own). The level drops a little too.");
+            vals["tEdr"]->dimmed = [this] { return (int) ph.value ("tEng") != 0 || ph.value ("tFreeze") > 0.5f || ph.value ("shape") == 4; };
             auto& f1 = dv ("tLC", "Low Cut", [] (float v) { return v <= 20.5f ? juce::String ("Off") : fmtHz (v); });
             auto& f2 = dv ("tHC", "High Cut", [] (float v) { return v >= 19900 ? juce::String ("Off") : fmtHz (v); });
             pageComps[1].push_back (&f1); pageComps[1].push_back (&f2);
@@ -2216,14 +2229,14 @@ void MainView::layoutTail()
     auto at = [&] (juce::Component* c, int col, int row) { c->setBounds (cell (gTail, col, row)); };
     if (m == 0)
     {   // ROOM: the length comes from the room; Diffusion, Freeze and the engine stay yours
-        freezeSeg.setBounds (segAt (gTail, 2, 0, 1));
+        freezeSeg.setBounds (segAt (gTail, 2, 0, 1)); at (vals["tEdr"].get(), 3, 0);
         roomAlgoBtn.setBounds (segAt (gTail, 0, 0, 2));
         tEngSeg.setBounds (segAt (gTail, 0, 1, 3));
     }
     else
     {
         at (vals["tDecay"].get(), 0, 0); at (vals["tSize"].get(), 1, 0); 
-        freezeSeg.setBounds (segAt (gTail, 2, 0, 1));
+        freezeSeg.setBounds (segAt (gTail, 2, 0, 1)); at (vals["tEdr"].get(), 3, 0);
         tEngSeg.setBounds (segAt (gTail, 0, 1, 4));
     }
     // AMBIENT's own two (row 3, on the right)
@@ -2243,7 +2256,7 @@ void MainView::layoutTail()
     hybBtn.setButtonText (ph.tr (hybIR ? "編集：IR" : "編集：ALGO", hybIR ? "Edit: IR" : "Edit: ALGO"));
     if (viewMode() != 0) return;
     const bool pg = shows (1);
-    for (auto* c : std::initializer_list<juce::Component*> { &freezeSeg, &tEngSeg }) c->setVisible (pg && showAlgo);
+    for (auto* c : std::initializer_list<juce::Component*> { &freezeSeg, &tEngSeg, vals["tEdr"].get() }) c->setVisible (pg && showAlgo);
     vals["tDiff"]->setVisible (pg);
     for (auto* c : std::initializer_list<juce::Component*> { vals["tDecay"].get(), vals["tSize"].get() }) c->setVisible (pg && showAlgo && m != 0);
     roomAlgoBtn.setVisible (pg && m == 0); tRoomSegAB.setVisible (pg && m == 0); tIrSegAB.setVisible (pg && (m == 2 || m == 3));
@@ -2679,9 +2692,40 @@ void MainView::fillPresetBox()
     root->addSubMenu (ph.tr ("用途別", "By use"), byKey (&PresetCat::use, {
         { "Vocal", J ? "ボーカル" : "Vocal" }, { "Drums", J ? "ドラム" : "Drums" }, { "Guitar", J ? "ギター" : "Guitar" }, { "Orchestra / keys", J ? "ピアノ・オーケストラ" : "Piano / orchestra" },
         { "Synth / pad", J ? "シンセ・パッド" : "Synth / pad" }, { "Mix bus", J ? "ミックス全体" : "Mix bus" }, { "FX", J ? "効果" : "FX" } }, false));
+    // (0.11.0) a folder tree -> nested submenus (folders first, then the presets); the same for the libraries and the user presets
+    struct Node { std::map<juce::String, Node> kids; std::vector<std::pair<juce::String, int>> items; };
+    auto place = [] (Node& root, const juce::String& sub, const juce::String& name, int id)
+    {
+        Node* n = &root; juce::StringArray parts; parts.addTokens (sub, "/", "");
+        for (auto& pt : parts) if (pt.isNotEmpty()) n = &n->kids[pt];
+        n->items.push_back ({ name, id });
+    };
+    std::function<void (const Node&, juce::PopupMenu&)> build = [&] (const Node& n, juce::PopupMenu& m)
+    {
+        for (auto& [k, v] : n.kids) { juce::PopupMenu sm; sm.setLookAndFeel (&lnf); build (v, sm); m.addSubMenu (k, sm); }
+        for (auto& [nm, id] : n.items) m.addItem (id, nm);
+    };
+    {   // additional libraries first (apart from the user presets): one submenu per library, its folders inside
+        const auto L = proc.libraryPresets();
+        presetBox.addSectionHeading (ph.tr ("追加ライブラリー", "Additional libraries"));
+        std::vector<juce::String> order; std::map<juce::String, Node> libs;
+        for (size_t i = 0; i < L.size(); ++i)
+        {
+            if (libs.find (L[i].lib) == libs.end()) order.push_back (L[i].lib);
+            place (libs[L[i].lib], L[i].sub, L[i].name, 6000 + (int) i);
+        }
+        for (auto& l : order) { juce::PopupMenu sm; sm.setLookAndFeel (&lnf); build (libs[l], sm); root->addSubMenu (l, sm); }
+        if (L.empty()) { juce::PopupMenu none; none.addItem (-1, ph.tr ("（まだありません）", "(none yet)"), false); root->addSubMenu (ph.tr ("ライブラリー", "Libraries"), none); }
+        presetBox.addItem (ph.tr ("ライブラリーを追加…（.rvlib／zip）", "Add a library... (.rvlib / zip)"), 4004);
+        presetBox.addItem (ph.tr ("ライブラリーのフォルダーを開く", "Open the libraries folder"), 4003);
+    }
     presetBox.addSectionHeading (ph.tr ("ユーザープリセット", "User presets"));
-    const auto U = proc.userPresets();
-    for (int i = 0; i < U.size(); ++i) presetBox.addItem (U[i].getFileNameWithoutExtension(), 5000 + i);
+    {   // the user presets with their folders (User Presets/<folder>/...)
+        Node un; const auto U = proc.userPresetItems();
+        for (size_t i = 0; i < U.size(); ++i) place (un, U[i].sub, U[i].name, 5000 + (int) i);
+        for (auto& [k, v] : un.kids) { juce::PopupMenu sm; sm.setLookAndFeel (&lnf); build (v, sm); root->addSubMenu (k, sm); }
+        for (auto& [nm, id] : un.items) presetBox.addItem (nm, id);
+    }
     presetBox.addSeparator();
     presetBox.addItem (ph.tr ("いまの設定をユーザープリセットに保存…", "Save the current settings as a user preset..."), 4000);
     presetBox.addItem (ph.tr ("ユーザープリセットのフォルダーを開く（削除・名前変更）", "Open the user preset folder (delete / rename)"), 4001);
@@ -2698,6 +2742,34 @@ void MainView::showPresetMenuExtras (int id)
 {
     syncPresetBox();
     if (id == 4001) { auto d = ERProcessor::userPresetDir(); d.createDirectory(); d.startAsProcess(); return; }
+    if (id == 4003)
+    {
+        auto d = ERProcessor::libraryDir(); d.createDirectory();
+        const auto rd = d.getChildFile ("README.txt");
+        if (! rd.existsAsFile())
+            rd.replaceWithText (juce::String::fromUTF8 ("追加ライブラリー / Additional libraries\n\n"
+                "ここに「ライブラリー名のフォルダー」を置くと、プリセットメニューの「追加ライブラリー」に出ます（ユーザープリセットとは別管理）。\n"
+                "  Libraries/<ライブラリー名>/[フォルダー/]<プリセット名>.rvpreset\n"
+                "メニューの「ライブラリーを追加…」で .rvlib（= そのフォルダーを zip にしたもの）を選んでも入ります。\n"
+                "プラグインはこのフォルダーに書き込んだり、消したりしません（削除・名前変更はフォルダーを直接操作）。\n\n"
+                "Put a folder named after the library here and it appears under Additional libraries in the preset menu (kept apart from the user presets).\n"
+                "  Libraries/<library name>/[folder/]<preset name>.rvpreset\n"
+                "Or choose a .rvlib (a zip of that folder) with Add a library... in the menu. The plug-in never writes to or deletes from this folder.\n"));
+        d.startAsProcess(); return;
+    }
+    if (id == 4004)
+    {   // a .rvlib / zip -> Libraries/<name>/ (a library folder can also just be put there by hand)
+        auto ch = std::make_shared<juce::FileChooser> (ph.tr ("追加するライブラリー（.rvlib／zip）を選ぶ", "Choose a library to add (.rvlib / zip)"), juce::File(), "*.rvlib;*.zip");
+        juce::Component::SafePointer<MainView> sp (this);
+        ch->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [sp, ch] (const juce::FileChooser& fc)
+        {
+            const auto f = fc.getResult(); if (sp == nullptr || ! f.existsAsFile()) return;
+            int n = 0; const auto err = ERProcessor::importLibrary (f, &n);
+            sp->flash (sp->ph.tr ("ライブラリーを追加", "Add a library"), err.isEmpty() ? (sp->ph.ja() ? juce::String (n) + juce::String::fromUTF8 (" 件のプリセットを追加しました。メニューの「追加ライブラリー」に出ます。") : juce::String (n) + " presets added. See Additional libraries in the menu.") : err);
+            sp->fillPresetBox();
+        });
+        return;
+    }
     if (id == 4002)
     {
         const auto d = ERProcessor::writeFactoryPresets(); d.startAsProcess();
