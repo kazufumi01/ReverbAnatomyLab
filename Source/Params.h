@@ -32,7 +32,9 @@ inline const char* const ids[] = {
     // 0.7.3: build-up per band
     "tSpreadHi", "colEr", "colTail", "tLC", "tHC", "tLCs", "tHCs", "rbW", "rbD", "rbH", "rbWall", "rbFloor", "erRoomSel", "tRoomSel", "tIrSel", "erIrSel", "tBody", "shape", "splay", "rbShape", "rbSplay", "backAbs", "rbBackAbs", "clutter", "rbClutter",
     // 1.1: initial decay (EDT / T30) of the Hall engine
-    "tEdr", "tEd1", "tEd2", "tEd3", "tEd4", "tEd5" };
+    "tEdr", "tEd1", "tEd2", "tEd3", "tEd4", "tEd5",
+    // 1.1: output buttons
+    "outByp", "outWet" };
 }
 
 inline juce::AudioProcessorValueTreeState::ParameterLayout makeLayout()
@@ -270,5 +272,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout makeLayout()
     // 1.1: the tail's initial decay as a share of its reverb time (Hall engine; 100 % = one straight slope), and per band (at the five RT points)
     fl ("tEdr", "Initial Decay", 40.0f, 100.0f, 100.0f, -1, "%");
     for (int i = 1; i <= 5; ++i) fl (("tEd" + juce::String (i)).toRawUTF8(), ("Initial Decay " + juce::String (i)).toRawUTF8(), 40.0f, 130.0f, 100.0f, -1, "%");
+    ch ("outByp", "Bypass", { "Off", "On" }, 0);
+    ch ("outWet", "Wet Only", { "Off", "On" }, 0);
     return L;
 }

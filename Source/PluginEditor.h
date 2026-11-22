@@ -71,7 +71,7 @@ private:
     juce::TextButton panelBtn, r2pBtn, r2pHybBtn; int lastR2p = 0;
     void startEar(); void endEar();
     // reverb pages
-    PageTabs tabs; DetailSwitch detSwitch; ParamToggle colErBtn, colTailBtn; juce::Rectangle<int> gEr, gTl, sideR, gCO, gCol, colorBox; RTGraph rtGraph; CurveGraph inGraph, eqGraph, erfGraph, tfGraph; ComboGraph combo; MonitorTools tools; void flatRT(); void flatEQ(); MeasurePanel measure; LayerBar layerBar; juce::TextButton swapBtn, eqFlatBtn;
+    PageTabs tabs; DetailSwitch detSwitch; ParamToggle colErBtn, colTailBtn, bypBtn, wetBtn; juce::Rectangle<int> gEr, gTl, sideR, gCO, gCol, colorBox; RTGraph rtGraph; CurveGraph inGraph, eqGraph, erfGraph, tfGraph; ComboGraph combo; MonitorTools tools; void flatRT(); void flatEQ(); MeasurePanel measure; LayerBar layerBar; juce::TextButton swapBtn, eqFlatBtn;
     juce::Rectangle<int> mainR, subR, specBox; bool specMain() const; NodeGraph* activeGraph(); void layoutMonitors(); void layoutRight(); static int layerFor (int page);
     struct RightClickClose : juce::MouseListener { std::function<void()> fn; void mouseDown (const juce::MouseEvent& e) override { if (e.mods.isPopupMenu() && fn) fn(); } } popCloser; NodePopup popup; IrTailView irtView;
     TailSourceSeg tSrcSeg; Seg irtRevSeg, irtAutoSeg; juce::TextButton fdnBtn, hybBtn, roomAlgoBtn; juce::Rectangle<int> gTView; void layoutTail(); int lastTailMode = -1; juce::String lastStatus; int lastIrtV = -1, popTick = 0;

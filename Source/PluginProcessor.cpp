@@ -46,6 +46,7 @@ void ERProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     erOnG = value ("erOn") > 0.5f ? erBalG() : 0.0f; tailG = value ("tOn") > 0.5f ? (float) er::db2g (value ("tLvl")) * tailBalG() : 0.0f; outW = value ("outW") / 100.0f;
     outGain.reset (sr, 0.03); outGain.setCurrentAndTargetValue ((float) er::db2g (value ("out")));
     const float m = value ("mix") / 100.0f; dryG = std::min (1.0f, 2 * (1 - m)); wetG = std::min (1.0f, 2 * m);
+    if (value ("outByp") > 0.5f) { dryG = 1; wetG = 0; bypG = 1; } else { bypG = 0; if (value ("outWet") > 0.5f) { dryG = 0; wetG = 1; } }
     curS = settings(); post.set (curS); post.reset();
     curSrc = (int) value ("src"); curIrMode = (int) value ("irMode"); curConv = curSrc == 2 && curIrMode == 1; curPreMs = value ("predelay");
     trans = Trans::normal; tGain = 1; transSeen = transReq.load();
@@ -900,7 +901,10 @@ void ERProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuff
         fifoW0 = w;
         for (int i = 0; i < n; ++i) { fifoD[(size_t) w] = mono[i]; fifoE[(size_t) w] = 0.5f * (wL[i] + wR[i]); fifoI[(size_t) w] = 0.5f * (iL[i] + iR[i]); w = (w + 1) & (fifoSize - 1); }
     }
-    const float m = juce::jlimit (0.0f, 1.0f, value ("mix") / 100.0f + 0.5f * modV[dm::dMix]), dT = std::min (1.0f, 2 * (1 - m)), wT = std::min (1.0f, 2 * m);
+    const float m = juce::jlimit (0.0f, 1.0f, value ("mix") / 100.0f + 0.5f * modV[dm::dMix]);
+    // (1.1) Bypass: the dry input as it is (no wet, no output level, no mono fold); Wet Only: no dry, wet at full
+    const bool byp = value ("outByp") > 0.5f, wetOnly = value ("outWet") > 0.5f;
+    const float dT = byp ? 1.0f : wetOnly ? 0.0f : std::min (1.0f, 2 * (1 - m)), wT = byp ? 0.0f : wetOnly ? 1.0f : std::min (1.0f, 2 * m), bT = byp ? 1.0f : 0.0f;
     const float comp = (float) er::db2g (autoComp.load());
     const float erT = value ("erOn") > 0.5f ? erBalG() * dm::db2g (12.0f * modV[dm::dER]) : 0.0f,
                 tT = value ("tOn") > 0.5f ? (float) er::db2g (value ("tLvl") + 12.0f * modV[dm::dTail]) * tailBalG() : 0.0f,
@@ -938,14 +942,15 @@ void ERProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuff
     float ep = 0, op = 0;
     for (int i = 0; i < n; ++i)
     {
-        dryG += 0.003f * (dT - dryG); wetG += 0.003f * (wT - wetG); outW += 0.002f * (wT2 - outW);
+        dryG += 0.003f * (dT - dryG); wetG += 0.003f * (wT - wetG); outW += 0.002f * (wT2 - outW); bypG += 0.003f * (bT - bypG);
         float l = dL[i] * kWetCal, r = dR[i] * kWetCal;           // (0.7.1) the wet bus at the level of common reverb plug-ins
         { const float mm = 0.5f * (l + r), sd = 0.5f * (l - r) * outW; l = mm + sd; r = mm - sd; }
         const float g = outGain.getNextValue();
         ep = std::max (ep, std::max (std::abs (l), std::abs (r)));
         fifoR[(size_t) ((fifoW0 + i) & (fifoSize - 1))] = 0.5f * (l + r);
-        float oL = (L[i] * dryG + l * wetG) * g, oR = (R[i] * dryG + r * wetG) * g;
-        if (monoOut) oL = oR = 0.5f * (oL + oR);
+        const float gg = g * (1.0f - bypG) + bypG;               // (the output level steps aside while bypassed)
+        float oL = (L[i] * dryG + l * wetG) * gg, oR = (R[i] * dryG + r * wetG) * gg;
+        if (monoOut && bypG < 0.5f) oL = oR = 0.5f * (oL + oR);
         L[i] = oL; R[i] = oR; op = std::max (op, std::max (std::abs (oL), std::abs (oR)));
     }
     fifoW.store ((fifoW0 + n) & (fifoSize - 1));
@@ -1008,7 +1013,7 @@ void ERProcessor::applyPreset (int index)
     const auto& P = presets(); if (index < 0 || index >= (int) P.size()) return;
     requestTransition (true);
     undo.beginNewTransaction();
-    static const juce::StringArray keep { "irMode", "irWin", "irAuto", "irThr", "irWet", "irSplit", "irFill", "mix", "out", "tail", "tailRT", "tailLvl", "autoLvl" };
+    static const juce::StringArray keep { "outByp", "outWet", "irMode", "irWin", "irAuto", "irThr", "irWet", "irSplit", "irFill", "mix", "out", "tail", "tailRT", "tailLvl", "autoLvl" };
     for (auto* id : pid::ids)
         if (! keep.contains (id))
             if (auto* p = apvts.getParameter (id)) { p->beginChangeGesture(); p->setValueNotifyingHost (p->getDefaultValue()); p->endChangeGesture(); }
@@ -1403,7 +1408,7 @@ juce::String ERProcessor::sectionOf (const juce::String& id)
 {
     static const juce::StringArray io { "inMode", "inW", "outMode", "outW", "iLC", "iHC", "iLCs", "iHCs", "iTilt", "iTo" };
     static const juce::StringArray tail { "rbW", "rbD", "rbH", "rbWall", "rbFloor", "rbShape", "rbSplay", "tRoomSel", "tIrSel", "tBody", "tLC", "tHC", "tLCs", "tHCs", "tDecay", "tSize", "tPre", "tDiff", "tModD", "tModR", "tLvl", "tFreeze", "rtMode", "mbN", "tSrc", "tEng", "tRoom", "aGrav", "aFb", "tSpread", "tShape", "tBassW", "tFill", "tSpreadHi", "tEdr", "tEd1", "tEd2", "tEd3", "tEd4", "tEd5" };
-    static const juce::StringArray global { "mix", "out", "erOn", "tOn", "erBal", "autoLvl", "colEr", "colTail" };
+    static const juce::StringArray global { "outByp", "outWet", "mix", "out", "erOn", "tOn", "erBal", "autoLvl", "colEr", "colTail" };
     if (id.startsWith ("dk") || id.startsWith ("gt")) return "DYN";
     if (id.startsWith ("ch") || id.startsWith ("l1") || id.startsWith ("l2") || id == "enAtk" || id == "enRel" || id == "enSens" || (id.length() == 5 && id[0] == 'm' && juce::CharacterFunctions::isDigit (id[1]))) return "MOD";
     if (io.contains (id)) return "IO";

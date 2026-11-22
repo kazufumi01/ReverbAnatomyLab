@@ -260,7 +260,7 @@ MainView::MainView (ERProcessor& p)
       irWet (ph, "irWet", { "Direct", "Wet only" }), tailSeg (ph, "tail", { "Off", "On" }), autoSeg (ph, "autoLvl", { "Off", "On" }),
       wallBox (ph, "wall"), floorBox (ph, "floor"), slopeBox (ph, "hcSlope"), lcSlopeBox (ph, "lcSlope"),
       echo (ph), roomView (ph), info (ph), lesson (ph), help (ph), ear (ph), earMask (ph),
-      tabs (ph), detSwitch (ph, tabs), colErBtn (ph, "colEr", "ER"), colTailBtn (ph, "colTail", "TAIL"), rtGraph (ph), inGraph (ph, CurveGraph::input), eqGraph (ph, CurveGraph::masterEq), erfGraph (ph, CurveGraph::erFilter), tfGraph (ph, CurveGraph::tailFilter), combo (ph, rtGraph, eqGraph), tools (ph), measure (ph), layerBar (ph), irtView (ph),
+      tabs (ph), detSwitch (ph, tabs), colErBtn (ph, "colEr", "ER"), colTailBtn (ph, "colTail", "TAIL"), bypBtn (ph, "outByp", "Bypass"), wetBtn (ph, "outWet", "Wet only"), rtGraph (ph), inGraph (ph, CurveGraph::input), eqGraph (ph, CurveGraph::masterEq), erfGraph (ph, CurveGraph::erFilter), tfGraph (ph, CurveGraph::tailFilter), combo (ph, rtGraph, eqGraph), tools (ph), measure (ph), layerBar (ph), irtView (ph),
       tSrcSeg (ph), irtRevSeg (ph, "irtRev", { "Off", "On" }), irtAutoSeg (ph, "irtAuto", { "Off", "On" }),
       tEngSeg (ph, "tEng", { "Hall", "Plate", "Spring", "Ambient" }), rtModeSeg (ph, "rtMode", { "EQ", "Multiband" }), freezeSeg (ph, "tFreeze", { "Off", "On" }), erOnSeg (ph, "erOn", { "Off", "On" }), tOnSeg (ph, "tOn", { "Off", "On" }),
       outModeSeg (ph, "outMode", { "Stereo", "Mono" }), iToSeg (ph, "iTo", { "ER + Tail", "Tail", "ER" }), eqOnSeg (ph, "eqOn", { "Off", "On" }),
@@ -379,7 +379,9 @@ MainView::MainView (ERProcessor& p)
              "Locked parameters keep their values when presets, section presets or lessons load. Right-click a knob or a value to lock / unlock it.");
     setHelp (detSwitch, "Detail", "下の詳細パラメーターの画面：リバーブ（INPUT｜ER｜TAIL｜OUTPUT を同時に）／DYN・MOD。",
              "The detail panel's screens: REVERB (INPUT | ER | TAIL | OUTPUT at once) / DYN and MOD.");
-    for (auto* t : { &colErBtn, &colTailBtn }) addAndMakeVisible (*t);
+    for (auto* t : { &colErBtn, &colTailBtn, &bypBtn, &wetBtn }) addAndMakeVisible (*t);
+    setHelp (bypBtn, "Bypass", "出力をドライ（入力そのまま）にします。リバーブ・出力レベル・モノ化は通りません。リバーブの処理は続くので、外すとテールがそのまま戻ります。", "Output = the dry input as it is: no reverb, no output level, no mono fold. The reverb keeps running, so the tail is there when you switch back.");
+    setHelp (wetBtn, "Wet only", "ドライを切って、リバーブだけを出力します（Mix つまみはそのまま）。Mix を動かさずにリバーブの音だけを確認できます。", "Mutes the dry and plays the reverb alone (the Mix knob stays where it is). Check the reverb by itself without touching Mix.");
     setHelp (colErBtn, "Color on ER", "COLOR（Bandwidth・Bits・Wander）を ER にかける／かけない。", "Apply COLOR (Bandwidth, Bits, Wander) to the ER or not.");
     setHelp (colTailBtn, "Color on Tail", "COLOR の Bandwidth・Bits をテールにもかける／かけない（Wander は ER の反射を揺らすので ER だけ）。",
              "Apply COLOR's Bandwidth and Bits to the tail as well, or not (Wander moves the ER's reflections, so it is ER only).");
@@ -714,7 +716,7 @@ MainView::MainView (ERProcessor& p)
         for (auto* c : std::initializer_list<juce::Component*> { &erfGraph, &tfGraph, &combo, &layerBar, &swapBtn, &eqFlatBtn }) addAndMakeVisible (c);
         setHelp (combo, "RT + EQ", "周波数ごとのリバーブタイム（青、左の目盛り＝Decay に対する %）とマスター EQ（黄、右の目盛り＝dB）を同じ画面で。RT の 100 % は上から 1/4、EQ の 0 dB は中央。青い四角＝測った T30、白い丸＝EDT。右クリックで小窓を閉じます。",
                  "Reverb time per frequency (blue, left scale = % of Decay) and the master EQ (yellow, right scale = dB) on one plot. RT 100 % sits a quarter down, EQ 0 dB in the middle. Blue squares = measured T30, white circles = EDT. Right-click closes the small window.");
-        for (auto* c : std::initializer_list<juce::Component*> { &tabs, &rtGraph, &inGraph, &eqGraph, &measure, &tEngSeg, &rtModeSeg, &freezeSeg, &erOnSeg, &tOnSeg, &outModeSeg, &iToSeg, &eqOnSeg, &inModeBox, &iLCsBox, &iHCsBox })
+        for (auto* c : std::initializer_list<juce::Component*> { &tabs, &rtGraph, &inGraph, &eqGraph, &measure, &tEngSeg, &rtModeSeg, &freezeSeg, &erOnSeg, &tOnSeg, &outModeSeg, &bypBtn, &wetBtn, &iToSeg, &eqOnSeg, &inModeBox, &iLCsBox, &iHCsBox })
             addAndMakeVisible (c);
         for (auto* sg : { &tEngSeg, &rtModeSeg, &freezeSeg, &erOnSeg, &tOnSeg, &outModeSeg, &iToSeg, &eqOnSeg }) if (auto* h = helpFor (sg->paramID)) setHelp (*sg, h->t, h->ja, h->en);
         for (auto* c : { &inModeBox, &iLCsBox, &iHCsBox }) if (auto* h = helpFor (c->paramID)) setHelp (*c, h->t, h->ja, h->en);
@@ -1338,7 +1340,8 @@ void MainView::resized()
         for (auto* id : { "mix", "out", "outW", "erBal" }) { vals[id]->fader = false; vals[id]->setCaption (cap[k]); vals[id]->setBounds (cell (gOut, k % 3, k / 3)); ++k; }
         vals["tailRT"]->setVisible (false); vals["tailLvl"]->setVisible (false); tailSeg.setVisible (false);
         erOnSeg.setBounds ({}); tOnSeg.setBounds ({});             // (the power switches are on the ER / TAIL titles)
-        outModeSeg.setBounds (segAt (gOut, 1, 1, 2));
+        outModeSeg.setBounds (segAt (gOut, 1, 1, 1));
+        wetBtn.setBounds (segAt (gOut, 2, 1, 1).reduced (0, 3)); bypBtn.setBounds (segAt (gOut, 2, 2, 1).reduced (0, 3));
         eqOnSeg.setBounds (segAt (gOut, 0, 2, 1)); eqFlatBtn.setBounds (segAt (gOut, 1, 2, 1));
         eqFlatBtn.setButtonText (ph.tr ("フラット", "Flat")); eqFlatBtn.getProperties().set ("fontPx", 10.0);
     }
@@ -1374,7 +1377,7 @@ void MainView::resized()
         for (auto& id : popIds) other.insert (vals[id].get());
         for (auto* c : srcComps) other.insert (c);
         for (auto* c : std::initializer_list<juce::Component*> { &irPrev, &irNext, &loadBtn, &cmpBtn, &srcRoomAB, &srcIrAB }) other.insert (c);       // (the SOURCE screen's cards stand over the ER column's place)
-        for (auto* c : std::initializer_list<juce::Component*> { vals["mix"].get(), vals["out"].get(), vals["outW"].get(), vals["erBal"].get(), &erOnSeg, &tOnSeg, &outModeSeg, &eqOnSeg, &eqFlatBtn,
+        for (auto* c : std::initializer_list<juce::Component*> { vals["mix"].get(), vals["out"].get(), vals["outW"].get(), vals["erBal"].get(), &erOnSeg, &tOnSeg, &outModeSeg, &bypBtn, &wetBtn, &eqOnSeg, &eqFlatBtn,
                                                                  vals["bw"].get(), vals["bits"].get(), vals["wander"].get() }) other.insert (c);       // (the OUTPUT panel; COLOR is in the deck)
         for (auto* c : getChildren())
             if (! other.count (c) && c != &tabs && c->getBounds().intersects (gEr))
@@ -2128,7 +2131,7 @@ void MainView::applyDetailVisibility()
     if (viewMode() != 0) return;
     const bool inOn = shows (3), outOn = shows (4);
     for (auto* c : std::initializer_list<juce::Component*> { vals["inW"].get(), vals["iTilt"].get(), vals["iLC"].get(), vals["iHC"].get(), &inModeBox, &iLCsBox, &iHCsBox, &iToSeg }) c->setVisible (inOn);
-    for (auto* c : std::initializer_list<juce::Component*> { vals["mix"].get(), vals["out"].get(), vals["outW"].get(), vals["erBal"].get(), &outModeSeg, &eqOnSeg, &eqFlatBtn }) c->setVisible (outOn);
+    for (auto* c : std::initializer_list<juce::Component*> { vals["mix"].get(), vals["out"].get(), vals["outW"].get(), vals["erBal"].get(), &outModeSeg, &bypBtn, &wetBtn, &eqOnSeg, &eqFlatBtn }) c->setVisible (outOn);
     erOnSeg.setVisible (false); tOnSeg.setVisible (false);
     for (auto* id : { "bw", "bits", "wander" }) vals[id]->setVisible (outOn);
     if (! shows (0)) for (auto* c : erComps) c->setVisible (false);
@@ -3071,7 +3074,7 @@ void MainView::timerCallback()
     if (++saveTick >= 30) { saveTick = 0; saveLastView(); }
     // (the tabs' chips: see the block below)
     if ((TailSourceSeg::modeOf (ph) * 2 + (int) proc.uiState.getProperty ("tEdit", 0)) * 8 + (int) ph.value ("tEng") != lastTailMode) { layoutTail(); if (viewMode() != 0) enforceMode(); repaint(); }
-    if (viewMode() == 0) { if ((popTick & 1) == 0) { deck.repaintKnobs(); repaint (colorBox); colErBtn.repaint(); colTailBtn.repaint(); if (shows (4)) repaint (gCol); tabs.repaint(); } }       // (the deck's knobs follow presets, undo and the host)
+    if (viewMode() == 0) { if ((popTick & 1) == 0) { deck.repaintKnobs(); repaint (colorBox); colErBtn.repaint(); colTailBtn.repaint(); bypBtn.repaint(); wetBtn.repaint(); if (shows (4)) repaint (gCol); tabs.repaint(); } }       // (the deck's knobs follow presets, undo and the host)
     if (viewMode() != 0)
     {
         enforceMode();

@@ -269,7 +269,7 @@ private:
     std::array<float, 64> lastSnap {}; int sinceRebuild = 1 << 20; bool pendingRebuild = true;
     std::atomic<int> irTapIdx { 0 }; er::IrSet irTaps[2]; std::atomic<int> irTapsVersion { 0 }; int seenIrVersion = -1;
     std::atomic<bool> convReady { false };
-    float dryG = 1, wetG = 1;
+    float dryG = 1, wetG = 1, bypG = 0;
     // preset / source switching: the wet path fades out, holds while the new settings land, then fades in
     enum class Trans { normal, out, hold, in };
     Trans trans = Trans::normal; int tCount = 0, tLen = 1, transSeen = 0; float tGain = 1, tFrom = 1, tPre = 1; bool holdDone = false; std::vector<float> gPre, gPost;
